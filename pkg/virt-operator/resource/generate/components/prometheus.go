@@ -159,7 +159,7 @@ func NewPrometheusRuleSpec(ns string, workloadUpdatesEnabled bool) *v1.Prometheu
 					},
 					{
 						Alert: "LowReadyVirtControllersCount",
-						Expr:  intstr.FromString("kubevirt_virt_controller_ready_total <  kubevirt_virt_controller_up_total"),
+						Expr:  intstr.FromString("kubevirt_virt_controller_ready_total < kubevirt_virt_controller_up_total"),
 						For:   "10m",
 						Annotations: map[string]string{
 							"summary":     "Some virt controllers are running but not ready.",
@@ -171,7 +171,7 @@ func NewPrometheusRuleSpec(ns string, workloadUpdatesEnabled bool) *v1.Prometheu
 					},
 					{
 						Alert: "NoReadyVirtController",
-						Expr:  intstr.FromString("kubevirt_virt_controller_ready_total == 0"),
+						Expr:  intstr.FromString("absent(kubevirt_virt_controller_ready_total) or kubevirt_virt_controller_ready_total == 0"),
 						For:   "10m",
 						Annotations: map[string]string{
 							"summary":     "No ready virt-controller was detected for the last 10 min.",
@@ -307,7 +307,7 @@ func NewPrometheusRuleSpec(ns string, workloadUpdatesEnabled bool) *v1.Prometheu
 					},
 					{
 						Alert: "NoReadyVirtOperator",
-						Expr:  intstr.FromString("kubevirt_virt_operator_ready_total == 0"),
+						Expr:  intstr.FromString("absent(kubevirt_virt_operator_ready_total) or kubevirt_virt_operator_ready_total == 0"),
 						For:   "10m",
 						Annotations: map[string]string{
 							"summary":     "No ready virt-operator was detected for the last 10 min.",
