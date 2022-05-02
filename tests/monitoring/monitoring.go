@@ -43,6 +43,11 @@ import (
 const (
 	virtControllerDeploymentName = "virt-controller"
 	virtOperatorDeploymentName   = "virt-operator"
+
+	virtOperatorDownAlert      = "VirtOperatorDown"
+	noReadyVirtOperatorAlert   = "NoReadyVirtOperator"
+	virtControllerDownAlert    = "VirtControllerDown"
+	noReadyVirtControllerAlert = "NoReadyVirtController"
 )
 
 var _ = Describe("[Serial][sig-monitoring]Prometheus Alerts", func() {
@@ -140,16 +145,16 @@ var _ = Describe("[Serial][sig-monitoring]Prometheus Alerts", func() {
 		It("VirtOperatorDown and NoReadyVirtOperator should be triggered when virt-operator is down", func() {
 			By("By scaling virt-operator to zero")
 			updateScale(virtOperatorDeploymentName, int32(0))
-			verifyAlertExist("VirtOperatorDown")
-			verifyAlertExist("NoReadyVirtOperator")
+			verifyAlertExist(virtOperatorDownAlert)
+			verifyAlertExist(noReadyVirtOperatorAlert)
 		})
 
 		It("VirtControllerDown and NoReadyVirtController should be triggered when virt-controller is down", func() {
 			By("By scaling virt-controller to zero")
 			updateScale(virtOperatorDeploymentName, int32(0))
 			updateScale(virtControllerDeploymentName, int32(0))
-			verifyAlertExist("VirtControllerDown")
-			verifyAlertExist("NoReadyVirtController")
+			verifyAlertExist(virtControllerDownAlert)
+			verifyAlertExist(noReadyVirtControllerAlert)
 		})
 	})
 
