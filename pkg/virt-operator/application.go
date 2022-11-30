@@ -23,6 +23,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"kubevirt.io/kubevirt/pkg/monitoring/system"
 	golog "log"
 	"net/http"
 	"os"
@@ -208,6 +209,7 @@ func Execute() {
 		Namespace:                app.informerFactory.Namespace(),
 		Secrets:                  app.informerFactory.Secrets(),
 		ConfigMap:                app.informerFactory.OperatorConfigMap(),
+		Node:                     app.informerFactory.KubeVirtNode(),
 	}
 
 	app.stores = util.Stores{
@@ -230,6 +232,7 @@ func Execute() {
 		NamespaceCache:                app.informerFactory.Namespace().GetStore(),
 		SecretCache:                   app.informerFactory.Secrets().GetStore(),
 		ConfigMapCache:                app.informerFactory.OperatorConfigMap().GetStore(),
+		NodeCache:                     app.informerFactory.KubeVirtNode().GetStore(),
 	}
 
 	onOpenShift, err := clusterutil.IsOnOpenShift(app.clientSet)
@@ -300,6 +303,9 @@ func Execute() {
 	)
 
 	app.clusterConfig.SetConfigModifiedCallback(app.shouldChangeLogVerbosity)
+
+	// Setup system monitoring metrics
+	system.SetupCollector(app.informers.Node)
 
 	app.Run()
 }

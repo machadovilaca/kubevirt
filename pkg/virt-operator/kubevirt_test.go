@@ -121,6 +121,7 @@ type KubeVirtTestData struct {
 	prometheusRuleSource           *framework.FakeControllerSource
 	secretsSource                  *framework.FakeControllerSource
 	configMapSource                *framework.FakeControllerSource
+	nodeSource                     *framework.FakeControllerSource
 
 	stop       chan struct{}
 	controller *KubeVirtController
@@ -255,6 +256,8 @@ func (k *KubeVirtTestData) BeforeTest() {
 	k.stores.SecretCache = k.informers.Secrets.GetStore()
 	k.informers.ConfigMap, k.configMapSource = testutils.NewFakeInformerFor(&k8sv1.ConfigMap{})
 	k.stores.ConfigMapCache = k.informers.ConfigMap.GetStore()
+	k.informers.Node, k.nodeSource = testutils.NewFakeInformerFor(&k8sv1.Node{})
+	k.stores.NodeCache = k.informers.Node.GetStore()
 
 	k.controller = NewKubeVirtController(k.virtClient, k.apiServiceClient, k.kvInformer, k.recorder, k.stores, k.informers, NAMESPACE)
 	k.controller.delayedQueueAdder = func(key interface{}, queue workqueue.RateLimitingInterface) {
