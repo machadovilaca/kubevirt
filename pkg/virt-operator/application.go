@@ -23,7 +23,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"kubevirt.io/kubevirt/pkg/monitoring/system"
 	golog "log"
 	"net/http"
 	"os"
@@ -303,9 +302,6 @@ func Execute() {
 	)
 
 	app.clusterConfig.SetConfigModifiedCallback(app.shouldChangeLogVerbosity)
-
-	// Setup system monitoring metrics
-	system.SetupCollector(app.informers.Node)
 
 	app.Run()
 }

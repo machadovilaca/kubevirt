@@ -26,6 +26,8 @@ import (
 	"sync"
 	"time"
 
+	"kubevirt.io/kubevirt/pkg/monitoring/system"
+
 	"k8s.io/apimachinery/pkg/types"
 
 	"golang.org/x/time/rate"
@@ -596,6 +598,9 @@ func (c *KubeVirtController) Run(threadiness int, stopCh <-chan struct{}) {
 	cache.WaitForCacheSync(stopCh, c.informers.Secrets.HasSynced)
 	cache.WaitForCacheSync(stopCh, c.informers.ConfigMap.HasSynced)
 	cache.WaitForCacheSync(stopCh, c.informers.Node.HasSynced)
+
+	// Setup system monitoring metrics
+	system.SetupCollector(c.informers.Node)
 
 	// Start the actual work
 	for i := 0; i < threadiness; i++ {

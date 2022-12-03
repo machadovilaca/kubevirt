@@ -24,7 +24,17 @@ import (
 	k8sv1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
 
+	v1 "kubevirt.io/api/core/v1"
 	"kubevirt.io/client-go/log"
+
+	"kubevirt.io/kubevirt/pkg/virtctl/guestfs"
+)
+
+var virtualizationEnabled = prometheus.NewDesc(
+	"kubevirt_node_virtualization_status",
+	"Node status to host virtualized workloads.",
+	[]string{"node"},
+	nil,
 )
 
 type Collector struct {
@@ -50,7 +60,7 @@ func (co *Collector) Collect(ch chan<- prometheus.Metric) {
 
 	cachedObjs := co.nodeInformer.GetIndexer().List()
 	if len(cachedObjs) == 0 {
-		log.Log.Infof("No nodes found")
+		log.Log.Warningf("No nodes found")
 		return
 	}
 
@@ -59,7 +69,31 @@ func (co *Collector) Collect(ch chan<- prometheus.Metric) {
 		nodes[i] = obj.(*k8sv1.Node)
 	}
 
+	collectNodesVirtualizationStatus(ch, nodes)
+}
+
+func collectNodesVirtualizationStatus(ch chan<- prometheus.Metric, nodes []*k8sv1.Node) {
 	for _, node := range nodes {
-		log.Log.Infof(node.Name)
+		collectNodeVirtualizationStatus(ch, node)
+	}
+}
+
+func collectNodeVirtualizationStatus(ch chan<- prometheus.Metric, node *k8sv1.Node) {
+	schedulable, ok := node.Labels[v1.NodeSchedulable]
+	if !ok {
+		ch <- prometheus.MustNewConstMetric(virtualizationEnabled, prometheus.GaugeValue, 0, node.Name)
+		return
+	}
+
+	kvm, ok := node.Status.Allocatable[guestfs.KvmDevice]
+	if !ok {
+		ch <- prometheus.MustNewConstMetric(virtualizationEnabled, prometheus.GaugeValue, 0, node.Name)
+		return
+	}
+
+	if schedulable == "true" && kvm.Value() != 0 {
+		ch <- prometheus.MustNewConstMetric(virtualizationEnabled, prometheus.GaugeValue, 1, node.Name)
+	} else {
+		ch <- prometheus.MustNewConstMetric(virtualizationEnabled, prometheus.GaugeValue, 0, node.Name)
 	}
 }
