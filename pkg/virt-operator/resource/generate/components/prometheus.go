@@ -553,6 +553,17 @@ func NewPrometheusRuleSpec(ns string, workloadUpdatesEnabled bool) *v1.Prometheu
 					vmStuckInStatusRule("starting"),
 					vmStuckInStatusRule("migrating"),
 					vmStuckInStatusRule("error"),
+					{
+						Alert: "KubeVirtNoAvailableNodesToRunVMs",
+						Expr:  intstr.FromString("(count(kubevirt_node_virtualization_status == 1) or vector(0)) == 0"),
+						For:   "5m",
+						Annotations: map[string]string{
+							"summary": "There are no available nodes in the cluster to run VMs.",
+						},
+						Labels: map[string]string{
+							severityAlertLabelKey: "warning",
+						},
+					},
 				},
 			},
 		},

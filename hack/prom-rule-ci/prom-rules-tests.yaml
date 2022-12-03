@@ -889,3 +889,34 @@ tests:
       - eval_time: 11m
         alertname: KubeVirtVMStuckInErrorState
         exp_alerts: []
+
+  # No nodes are available to host VMs
+  - interval: 1m
+    input_series:
+      - series: 'kubevirt_node_virtualization_status{node="node1"}'
+        values: "1 1 1 1 1 1 1 0 0 0 0 0 0 1"
+      - series: 'kubevirt_node_virtualization_status{node="node2"}'
+        values: "1 1 1 1 1 1 1 0 0 0 0 0 0 0"
+
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: KubeVirtNoAvailableNodesToRunVMs
+        exp_alerts: []
+
+      - eval_time: 10m
+        alertname: KubeVirtNoAvailableNodesToRunVMs
+        exp_alerts: []
+
+      - eval_time: 12m
+        alertname: KubeVirtNoAvailableNodesToRunVMs
+        exp_alerts:
+          - exp_annotations:
+              summary: "There are no available nodes in the cluster to run VMs."
+            exp_labels:
+              severity: "warning"
+              kubernetes_operator_component: "kubevirt"
+              kubernetes_operator_part_of: "kubevirt"
+
+      - eval_time: 13m
+        alertname: KubeVirtNoAvailableNodesToRunVMs
+        exp_alerts: []
