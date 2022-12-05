@@ -57,6 +57,8 @@ import (
 	v1 "kubevirt.io/api/core/v1"
 	"kubevirt.io/client-go/kubecli"
 
+	"kubevirt.io/kubevirt/pkg/virtctl/guestfs"
+
 	promv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
@@ -259,6 +261,11 @@ var _ = Describe("[Serial][sig-monitoring]Prometheus Alerts", Serial, func() {
 		newRules.Spec.Groups = gs
 
 		updatePromRules(&newRules)
+	}
+
+	deleteDaemonSet := func(name string) {
+		err = virtClient.AppsV1().DaemonSets(flags.KubeVirtInstallNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+		Expect(err).ToNot(HaveOccurred())
 	}
 
 	BeforeEach(func() {
@@ -638,7 +645,63 @@ var _ = Describe("[Serial][sig-monitoring]Prometheus Alerts", Serial, func() {
 			libwait.WaitForVirtualMachineToDisappearWithTimeout(vmi, 240)
 		})
 	})
+
+	Context("System Alerts", func() {
+		BeforeEach(func() {
+			scales = make(map[string]*autoscalingv1.Scale, 1)
+			backupScale(virtOperator.deploymentName)
+			updateScale(virtOperator.deploymentName, 0)
+
+			deleteDaemonSet(virtHandler.deploymentName)
+			reduceAlertPendingTime()
+		})
+
+		AfterEach(func() {
+			revertScale(virtOperator.deploymentName)
+			waitUntilAlertDoesNotExist("KubeVirtNoAvailableNodesToRunVMs")
+		})
+
+		It("KubeVirtNoAvailableNodesToRunVMs should be triggered when there are no available nodes in the cluster to run VMs.", func() {
+			By("Removing the kubevirt.io/schedulable label from all nodes")
+			nodes, err := virtClient.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+			Expect(err).ToNot(HaveOccurred())
+
+			err = removeSchedulableLabelFromNodes(virtClient, nodes)
+			Expect(err).ToNot(HaveOccurred())
+
+			By("Verifying KubeVirtNoAvailableNodesToRunVMs alert exists")
+			verifyAlertExist("KubeVirtNoAvailableNodesToRunVMs")
+		})
+	})
+
 })
+
+func removeSchedulableLabelFromNodes(virtClient kubecli.KubevirtClient, nodes *k8sv1.NodeList) error {
+	for _, node := range nodes.Items {
+		err := removeSchedulableLabelFromNode(virtClient, node.Name)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func removeSchedulableLabelFromNode(virtClient kubecli.KubevirtClient, nodeName string) error {
+	node, err := virtClient.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	delete(node.Labels, guestfs.KvmDevice)
+
+	_, err = virtClient.CoreV1().Nodes().Update(context.Background(), node, metav1.UpdateOptions{})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func checkRequiredAnnotations(rule promv1.Rule) {
 	ExpectWithOffset(1, rule.Annotations).To(HaveKeyWithValue("summary", Not(BeEmpty())),
