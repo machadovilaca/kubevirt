@@ -646,6 +646,9 @@ var _ = Describe("[Serial][sig-monitoring]Prometheus Alerts", Serial, func() {
 			"KubeVirtComponentExceedsRequestedCPU",
 			"KubeVirtComponentExceedsRequestedMemory",
 			"KubevirtVmHighMemoryUsage",
+			"LowVirtAPICount",
+			"LowVirtControllersCount",
+			"LowVirtOperatorCount",
 		}
 
 		BeforeEach(func() {
@@ -708,6 +711,42 @@ var _ = Describe("[Serial][sig-monitoring]Prometheus Alerts", Serial, func() {
 			By("deleting the VirtualMachineInstance")
 			Expect(virtClient.VirtualMachineInstance(vmi.Namespace).Delete(vmi.Name, &metav1.DeleteOptions{})).To(Succeed())
 		})
+
+		It("should fire LowVirtAPICount alert", func() {
+			// alert needs at least 2 nodes to be triggered
+			checks.SkipIfMigrationIsNotPossible()
+
+			By("scaling virt-api deployment to 0")
+			originalReplicas := updateDeploymentScale(virtClient, virtApi.deploymentName, 0)
+
+			By("waiting for LowVirtAPICount alert")
+			verifyAlertExist("LowVirtAPICount")
+
+			By("reverting virt-api deployment scale")
+			_ = updateDeploymentScale(virtClient, virtApi.deploymentName, originalReplicas)
+		})
+
+		It("should fire LowVirtControllersCount alert", func() {
+			// alert needs at least 2 nodes to be triggered
+			checks.SkipIfMigrationIsNotPossible()
+
+			By("scaling virt-controller deployment to 0")
+			originalReplicas := updateDeploymentScale(virtClient, virtController.deploymentName, 0)
+
+			By("waiting for LowVirtControllersCount alert")
+			verifyAlertExist("LowVirtControllersCount")
+
+			By("reverting virt-controller deployment scale")
+			_ = updateDeploymentScale(virtClient, virtController.deploymentName, originalReplicas)
+		})
+
+		It("should fire LowVirtOperatorCount alert", func() {
+			// alert needs at least 2 nodes to be triggered
+			checks.SkipIfMigrationIsNotPossible()
+
+			By("waiting for LowVirtOperatorCount alert")
+			verifyAlertExist("LowVirtOperatorCount")
+		})
 	})
 })
 
@@ -721,6 +760,19 @@ func updateDeploymentResourcesRequest(virtClient kubecli.KubevirtClient, deploym
 	deployment.Spec.Template.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU] = cpu
 	deployment.Spec.Template.Spec.Containers[0].Resources.Requests[corev1.ResourceMemory] = memory
 	_, err = virtClient.AppsV1().Deployments(flags.KubeVirtInstallNamespace).Update(context.Background(), deployment, metav1.UpdateOptions{})
+	Expect(err).ToNot(HaveOccurred())
+
+	return
+}
+
+func updateDeploymentScale(virtClient kubecli.KubevirtClient, deploymentName string, replicas int32) (originalReplicas int32) {
+	scale, err := virtClient.AppsV1().Deployments(flags.KubeVirtInstallNamespace).GetScale(context.TODO(), deploymentName, metav1.GetOptions{})
+	Expect(err).ToNot(HaveOccurred())
+
+	originalReplicas = scale.Spec.Replicas
+
+	scale.Spec.Replicas = replicas
+	_, err = virtClient.AppsV1().Deployments(flags.KubeVirtInstallNamespace).UpdateScale(context.Background(), deploymentName, scale, metav1.UpdateOptions{})
 	Expect(err).ToNot(HaveOccurred())
 
 	return
