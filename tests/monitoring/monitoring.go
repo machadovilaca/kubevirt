@@ -28,22 +28,20 @@ import (
 	"strings"
 	"time"
 
-	"kubevirt.io/kubevirt/tests/framework/matcher"
-
 	k8sv1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/rand"
 
-	"kubevirt.io/kubevirt/tests/libnode"
-
-	"kubevirt.io/kubevirt/tests/clientcmd"
-
 	"kubevirt.io/kubevirt/tests"
+	"kubevirt.io/kubevirt/tests/clientcmd"
 	"kubevirt.io/kubevirt/tests/console"
+	cd "kubevirt.io/kubevirt/tests/containerdisk"
 	"kubevirt.io/kubevirt/tests/exec"
 	"kubevirt.io/kubevirt/tests/flags"
 	"kubevirt.io/kubevirt/tests/framework/checks"
+	"kubevirt.io/kubevirt/tests/framework/matcher"
+	"kubevirt.io/kubevirt/tests/libnode"
 	"kubevirt.io/kubevirt/tests/libvmi"
 	"kubevirt.io/kubevirt/tests/util"
 
@@ -650,6 +648,7 @@ var _ = Describe("[Serial][sig-monitoring]Prometheus Alerts", Serial, func() {
 			"LowVirtControllersCount",
 			"LowVirtOperatorCount",
 			"OrphanedVirtualMachineInstances",
+			"VMCannotBeEvicted",
 		}
 
 		BeforeEach(func() {
@@ -769,6 +768,30 @@ var _ = Describe("[Serial][sig-monitoring]Prometheus Alerts", Serial, func() {
 			daemonset.ObjectMeta.UID = ""
 			_, err = virtClient.AppsV1().DaemonSets(flags.KubeVirtInstallNamespace).Create(context.Background(), daemonset, metav1.CreateOptions{})
 			Expect(err).ToNot(HaveOccurred(), "should restart virt-handler daemonset")
+
+			By("deleting the VirtualMachineInstance")
+			err = virtClient.VirtualMachineInstance(vmi.Namespace).Delete(vmi.Name, &metav1.DeleteOptions{})
+			Expect(err).ToNot(HaveOccurred(), "should delete VMI")
+		})
+
+		It("should fire VMCannotBeEvicted alert", func() {
+			By("starting non-migratable VMI with eviction strategy set to LiveMigrate ")
+			vmi := tests.NewRandomVMIWithEphemeralDisk(cd.ContainerDiskFor(cd.ContainerDiskAlpine))
+			vmi.Spec.Domain.Devices.Interfaces = []v1.Interface{
+				{
+					Name: "default",
+					InterfaceBindingMethod: v1.InterfaceBindingMethod{
+						Bridge: &v1.InterfaceBridge{},
+					},
+				},
+			}
+			strategy := v1.EvictionStrategyLiveMigrate
+			vmi.Spec.EvictionStrategy = &strategy
+
+			vmi = tests.RunVMIAndExpectLaunchIgnoreWarnings(vmi, 240)
+
+			By("waiting for VMCannotBeEvicted alert")
+			verifyAlertExist("VMCannotBeEvicted")
 
 			By("deleting the VirtualMachineInstance")
 			err = virtClient.VirtualMachineInstance(vmi.Namespace).Delete(vmi.Name, &metav1.DeleteOptions{})
