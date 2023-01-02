@@ -649,6 +649,7 @@ var _ = Describe("[Serial][sig-monitoring]Prometheus Alerts", Serial, func() {
 			"LowVirtAPICount",
 			"LowVirtControllersCount",
 			"LowVirtOperatorCount",
+			"OrphanedVirtualMachineInstances",
 		}
 
 		BeforeEach(func() {
@@ -746,6 +747,32 @@ var _ = Describe("[Serial][sig-monitoring]Prometheus Alerts", Serial, func() {
 
 			By("waiting for LowVirtOperatorCount alert")
 			verifyAlertExist("LowVirtOperatorCount")
+		})
+
+		It("should fire OrphanedVirtualMachineInstances alert", func() {
+			By("starting VMI")
+			vmi := tests.NewRandomFedoraVMIWithGuestAgent()
+			vmi = tests.RunVMIAndExpectLaunch(vmi, 240)
+
+			By("delete virt-handler daemonset")
+			daemonset, err := virtClient.AppsV1().DaemonSets(flags.KubeVirtInstallNamespace).Get(context.Background(), virtHandler.deploymentName, metav1.GetOptions{})
+			Expect(err).ToNot(HaveOccurred(), "should get virt-handler daemonset")
+			err = virtClient.AppsV1().DaemonSets(flags.KubeVirtInstallNamespace).Delete(context.Background(), virtHandler.deploymentName, metav1.DeleteOptions{})
+			Expect(err).ToNot(HaveOccurred())
+
+			By("waiting for OrphanedVirtualMachineInstances alert")
+			verifyAlertExist("OrphanedVirtualMachineInstances")
+
+			By("restarting virt-handler daemonset")
+			daemonset.Annotations = nil
+			daemonset.ObjectMeta.ResourceVersion = ""
+			daemonset.ObjectMeta.UID = ""
+			_, err = virtClient.AppsV1().DaemonSets(flags.KubeVirtInstallNamespace).Create(context.Background(), daemonset, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred(), "should restart virt-handler daemonset")
+
+			By("deleting the VirtualMachineInstance")
+			err = virtClient.VirtualMachineInstance(vmi.Namespace).Delete(vmi.Name, &metav1.DeleteOptions{})
+			Expect(err).ToNot(HaveOccurred(), "should delete VMI")
 		})
 	})
 })
