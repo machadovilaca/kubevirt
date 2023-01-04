@@ -916,6 +916,7 @@ tests:
               severity: "warning"
               kubernetes_operator_component: "kubevirt"
               kubernetes_operator_part_of: "kubevirt"
+              operator_health_impact: "none"
 
       - eval_time: 13m
         alertname: KubeVirtNoAvailableNodesToRunVMs

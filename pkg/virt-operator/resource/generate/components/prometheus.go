@@ -561,7 +561,8 @@ func NewPrometheusRuleSpec(ns string, workloadUpdatesEnabled bool) *v1.Prometheu
 							"summary": "There are no available nodes in the cluster to run VMs.",
 						},
 						Labels: map[string]string{
-							severityAlertLabelKey: "warning",
+							severityAlertLabelKey:        "warning",
+							operatorHealthImpactLabelKey: "none",
 						},
 					},
 				},
