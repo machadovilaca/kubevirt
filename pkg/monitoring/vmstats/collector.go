@@ -35,6 +35,9 @@ const (
 	migratingMetric  = "kubevirt_vm_migrating_status_last_transition_timestamp_seconds"
 	nonRunningMetric = "kubevirt_vm_non_running_status_last_transition_timestamp_seconds"
 	errorMetric      = "kubevirt_vm_error_status_last_transition_timestamp_seconds"
+
+	infoMetric    = "kubevirt_vm_info"
+	pvcInfoMetric = "kubevirt_vm_pvc_info"
 )
 
 var (
@@ -100,6 +103,20 @@ var (
 			labels,
 			nil,
 		),
+
+		infoMetric: prometheus.NewDesc(
+			infoMetric,
+			"Virtual Machine info.",
+			[]string{"name", "namespace", "os", "workload", "flavor"},
+			nil,
+		),
+
+		pvcInfoMetric: prometheus.NewDesc(
+			pvcInfoMetric,
+			"Virtual Machine PVC info.",
+			[]string{"name", "namespace", "type", "volumename", "persistentvolumeclaim"},
+			nil,
+		),
 	}
 
 	labels = []string{"name", "namespace"}
@@ -148,32 +165,65 @@ type prometheusScraper struct {
 
 func (ps *prometheusScraper) Report(vms []*k6tv1.VirtualMachine) {
 	for _, vm := range vms {
-		ps.updateVMMetrics(vm)
+		ps.updateVMInfoMetrics(vm)
+		ps.updateVMStatusMetrics(vm)
+		ps.updatePVCInfoMetrics(vm)
 	}
 }
 
-func (ps *prometheusScraper) updateVMMetrics(vm *k6tv1.VirtualMachine) {
+func (ps *prometheusScraper) updateVMInfoMetrics(vm *k6tv1.VirtualMachine) {
+	ps.pushMetric(metrics[infoMetric], prometheus.GaugeValue, 1,
+		vm.Name, vm.Namespace,
+		vm.Spec.Template.ObjectMeta.Annotations["vm.kubevirt.io/os"],
+		vm.Spec.Template.ObjectMeta.Annotations["vm.kubevirt.io/workload"],
+		vm.Spec.Template.ObjectMeta.Annotations["vm.kubevirt.io/flavor"],
+	)
+}
+
+func (ps *prometheusScraper) updatePVCInfoMetrics(vm *k6tv1.VirtualMachine) {
+	if vm.Spec.Template.Spec.Volumes == nil {
+		return
+	}
+
+	for _, volume := range vm.Spec.Template.Spec.Volumes {
+		var pvcType, pvcName string
+		if volume.PersistentVolumeClaim != nil {
+			pvcType = "PersistentVolumeClaim"
+			pvcName = volume.PersistentVolumeClaim.ClaimName
+		} else if volume.DataVolume != nil {
+			pvcType = "DataVolume"
+			pvcName = volume.DataVolume.Name
+		} else {
+			continue
+		}
+
+		ps.pushMetric(metrics[pvcInfoMetric], prometheus.GaugeValue, 1,
+			vm.Name, vm.Namespace,
+			pvcType,
+			volume.Name,
+			pvcName,
+		)
+	}
+}
+
+func (ps *prometheusScraper) updateVMStatusMetrics(vm *k6tv1.VirtualMachine) {
 	status := vm.Status.PrintableStatus
 	currentStateMetric := getMetricDesc(status)
 
 	lastTransitionTime := getLastConditionDetails(vm)
 
-	for _, metric := range metrics {
-		if metric == currentStateMetric {
-			ps.pushMetric(currentStateMetric, float64(lastTransitionTime), vm.Name, vm.Namespace)
+	statusMetricsNames := []string{startingMetric, runningMetric, migratingMetric, nonRunningMetric, errorMetric}
+	for _, statusMetricsName := range statusMetricsNames {
+		if metrics[statusMetricsName] == currentStateMetric {
+			ps.pushMetric(currentStateMetric, prometheus.CounterValue, float64(lastTransitionTime), vm.Name, vm.Namespace)
 		} else {
-			ps.pushMetric(metric, 0, vm.Name, vm.Namespace)
+			ps.pushMetric(metrics[statusMetricsName], prometheus.CounterValue, 0, vm.Name, vm.Namespace)
 		}
 	}
 }
 
-func (ps *prometheusScraper) pushMetric(desc *prometheus.Desc, value float64, labelValues ...string) {
-	mv, err := prometheus.NewConstMetric(
-		desc,
-		prometheus.CounterValue,
-		value,
-		labelValues...,
-	)
+func (ps *prometheusScraper) pushMetric(desc *prometheus.Desc, metricType prometheus.ValueType, value float64, labelValues ...string) {
+	mv, err := prometheus.NewConstMetric(desc, metricType, value, labelValues...)
 	if err != nil {
 		log.Log.V(4).Warningf("Error creating the new const metric for %s: %s", desc, err)
 		return
