@@ -548,6 +548,20 @@ func NewPrometheusRuleSpec(ns string, workloadUpdatesEnabled bool) *v1.Prometheu
 							operatorHealthImpactLabelKey: "critical",
 						},
 					},
+					{
+						Alert: "WindowsVirtualMachineMayReportOSDErrors",
+						Expr:  intstr.FromString("kubevirt_vm_pvc_info * on (name) group_left() kubevirt_vm_info{os=~'windows.*'} * on(persistentvolumeclaim) kube_persistentvolumeclaim_info{storageclass='ocs-storagecluster-ceph-rbd'}"),
+						For:   "5m",
+						Annotations: map[string]string{
+							"description": "VirtualMachine {{ $labels.name }} may report OSD errors",
+							"summary":     "When running windows VMs using default ODF storage with krbd, it may report bad crc/signature errors.",
+							"runbook_url": fmt.Sprintf(runbookURLTemplate, "WindowsVirtualMachineMayReportOSDErrors"),
+						},
+						Labels: map[string]string{
+							severityAlertLabelKey:        "warning",
+							operatorHealthImpactLabelKey: "none",
+						},
+					},
 				},
 			},
 		},
