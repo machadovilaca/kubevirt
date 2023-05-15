@@ -30,8 +30,11 @@ import (
 	"github.com/onsi/gomega/types"
 
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/rand"
 
 	v1 "kubevirt.io/api/core/v1"
 	"kubevirt.io/client-go/kubecli"
@@ -40,6 +43,7 @@ import (
 
 	"kubevirt.io/kubevirt/tests"
 	"kubevirt.io/kubevirt/tests/clientcmd"
+	cd "kubevirt.io/kubevirt/tests/containerdisk"
 	"kubevirt.io/kubevirt/tests/decorators"
 	"kubevirt.io/kubevirt/tests/framework/checks"
 	"kubevirt.io/kubevirt/tests/framework/kubevirt"
@@ -227,6 +231,72 @@ var _ = Describe("[Serial][sig-monitoring]VM Monitoring", Serial, decorators.Sig
 				waitForMetricValue(virtClient, totalMetric, int64(i))
 				waitForMetricValue(virtClient, bytesMetric, quantity.Value()*int64(i))
 			}
+		})
+	})
+
+	Context("VM alerts", func() {
+		createSC := func(name string) {
+			_, err := virtClient.StorageV1().StorageClasses().Get(context.Background(), name, metav1.GetOptions{})
+			if err != nil {
+				Expect(errors.IsNotFound(err)).To(BeTrue())
+				sc := &storagev1.StorageClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "ocs-storagecluster-ceph-rbd",
+					},
+					Provisioner: "openshift-storage.rbd.csi.ceph.com",
+				}
+				_, err = virtClient.StorageV1().StorageClasses().Create(context.Background(), sc, metav1.CreateOptions{})
+				Expect(err).ToNot(HaveOccurred())
+			}
+		}
+
+		createPVC := func(storageClass string, name string) {
+			pvc := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: name,
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					StorageClassName: &storageClass,
+					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							"storage": resource.MustParse("1Gi"),
+						},
+					},
+				},
+			}
+			_, err := virtClient.CoreV1().PersistentVolumeClaims(util.NamespaceTestDefault).Create(context.Background(), pvc, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		}
+
+		createVM := func(name string) {
+			vmWin10 := tests.NewRandomVMWithEphemeralDisk(cd.ContainerDiskFor(cd.ContainerDiskAlpine))
+			vmWin10.Spec.Template.ObjectMeta.Annotations = map[string]string{
+				"vm.kubevirt.io/os": "windows10",
+			}
+			vmWin10.Spec.Template.Spec.Volumes = append(vmWin10.Spec.Template.Spec.Volumes, v1.Volume{
+				Name: "windows-vm",
+				VolumeSource: v1.VolumeSource{
+					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+						PersistentVolumeClaimVolumeSource: corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: name,
+						},
+					},
+				},
+			})
+			_, err := virtClient.VirtualMachine(vmWin10.Namespace).Create(context.Background(), vmWin10)
+			Expect(err).ToNot(HaveOccurred())
+		}
+
+		It("should throw WindowsVirtualMachineMayReportOSDErrors when a windows VMs is using default ODF storage", func() {
+			defaultODFSCName := "ocs-storagecluster-ceph-rbd"
+			createSC(defaultODFSCName)
+
+			randVMName := "windows-vm-" + rand.String(5)
+			createPVC(defaultODFSCName, randVMName)
+			createVM(randVMName)
+
+			verifyAlertExist(virtClient, "WindowsVirtualMachineMayReportOSDErrors")
 		})
 	})
 })
