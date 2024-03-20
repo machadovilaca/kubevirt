@@ -4,20 +4,17 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"sort"
 	"strings"
 
 	"github.com/machadovilaca/operator-observability/pkg/operatormetrics"
 
-	domainstats "kubevirt.io/kubevirt/pkg/monitoring/domainstats/prometheus" // import for prometheus metrics
 	virt_api "kubevirt.io/kubevirt/pkg/monitoring/metrics/virt-api"
 	virt_controller "kubevirt.io/kubevirt/pkg/monitoring/metrics/virt-controller"
+	virt_handler "kubevirt.io/kubevirt/pkg/monitoring/metrics/virt-handler"
 	virt_operator "kubevirt.io/kubevirt/pkg/monitoring/metrics/virt-operator"
 	"kubevirt.io/kubevirt/pkg/monitoring/rules"
-	_ "kubevirt.io/kubevirt/pkg/virt-controller/watch"
 )
 
 // constant parts of the file
@@ -49,25 +46,43 @@ const (
 )
 
 func main() {
-	handler := domainstats.Handler(1)
-	RegisterFakeDomainCollector()
+	var metrics metricList
 
-	req, err := http.NewRequest(http.MethodGet, "/metrics", nil)
+	err := virt_controller.SetupMetrics(nil, nil, nil, nil, nil, nil, nil, nil)
+	checkError(err)
+	for _, m := range virt_controller.ListMetrics() {
+		metrics = append(metrics, newMetric(m))
+	}
+
+	err = virt_api.SetupMetrics()
+	checkError(err)
+	for _, m := range virt_api.ListMetrics() {
+		metrics = append(metrics, newMetric(m))
+	}
+
+	err = virt_operator.SetupMetrics()
+	checkError(err)
+	for _, m := range virt_operator.ListMetrics() {
+		metrics = append(metrics, newMetric(m))
+	}
+
+	err = virt_handler.SetupMetrics()
+	checkError(err)
+	for _, m := range virt_handler.ListMetrics() {
+		metrics = append(metrics, newMetric(m))
+	}
+
+	err = rules.SetupRules("")
 	checkError(err)
 
-	recorder := httptest.NewRecorder()
-
-	handler.ServeHTTP(recorder, req)
-
-	metrics := getMetricsNotIncludeInEndpointByDefault()
-
-	if status := recorder.Code; status == http.StatusOK {
-		err := parseVirtMetrics(recorder.Body, &metrics)
-		checkError(err)
-
-	} else {
-		panic(fmt.Errorf("got HTTP status code of %d from /metrics", recorder.Code))
+	for _, rule := range rules.ListRecordingRules() {
+		metrics = append(metrics, metric{
+			name:        rule.GetOpts().Name,
+			description: rule.GetOpts().Help,
+			mType:       string(rule.GetType()),
+		})
 	}
+
 	writeToFile(metrics)
 }
 
@@ -116,72 +131,6 @@ func (m metricList) writeToFile(newFile io.WriteCloser) {
 	for _, met := range m {
 		met.writeToFile(newFile)
 	}
-}
-
-func getMetricsNotIncludeInEndpointByDefault() metricList {
-	metrics := metricList{
-		{
-			name:        domainstats.MigrateVmiDataProcessedMetricName,
-			description: "The total Guest OS data processed and migrated to the new VM.",
-			mType:       "Gauge",
-		},
-		{
-			name:        domainstats.MigrateVmiDataRemainingMetricName,
-			description: "The remaining guest OS data to be migrated to the new VM.",
-			mType:       "Gauge",
-		},
-		{
-			name:        domainstats.MigrateVmiDirtyMemoryRateMetricName,
-			description: "The rate of memory being dirty in the Guest OS.",
-			mType:       "Gauge",
-		},
-		{
-			name:        domainstats.MigrateVmiMemoryTransferRateMetricName,
-			description: "The rate at which the memory is being transferred.",
-			mType:       "Gauge",
-		},
-		{
-			name:        "kubevirt_vmi_phase_count",
-			description: "Sum of VMIs per phase and node. `phase` can be one of the following: [`Pending`, `Scheduling`, `Scheduled`, `Running`, `Succeeded`, `Failed`, `Unknown`].",
-			mType:       "Gauge",
-		},
-		{
-			name:        "kubevirt_vmi_non_evictable",
-			description: "Indication for a VirtualMachine that its eviction strategy is set to Live Migration but is not migratable.",
-			mType:       "Gauge",
-		},
-	}
-
-	err := virt_controller.SetupMetrics(nil, nil, nil, nil, nil, nil, nil, nil)
-	checkError(err)
-	for _, m := range virt_controller.ListMetrics() {
-		metrics = append(metrics, newMetric(m))
-	}
-
-	err = virt_api.SetupMetrics()
-	checkError(err)
-	for _, m := range virt_api.ListMetrics() {
-		metrics = append(metrics, newMetric(m))
-	}
-
-	err = virt_operator.SetupMetrics()
-	checkError(err)
-	for _, m := range virt_operator.ListMetrics() {
-		metrics = append(metrics, newMetric(m))
-	}
-
-	err = rules.SetupRules("")
-	checkError(err)
-
-	for _, rule := range rules.ListRecordingRules() {
-		metrics = append(metrics, metric{
-			name:        rule.GetOpts().Name,
-			description: rule.GetOpts().Help,
-			mType:       string(rule.GetType()),
-		})
-	}
-
-	return metrics
 }
 
 func newMetric(om operatormetrics.Metric) metric {

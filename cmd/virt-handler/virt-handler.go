@@ -73,6 +73,7 @@ import (
 	"kubevirt.io/kubevirt/pkg/controller"
 	_ "kubevirt.io/kubevirt/pkg/monitoring/client/prometheus"               // import for prometheus metrics
 	promdomain "kubevirt.io/kubevirt/pkg/monitoring/domainstats/prometheus" // import for prometheus metrics
+	metricshandler "kubevirt.io/kubevirt/pkg/monitoring/metrics/virt-handler/handler"
 	"kubevirt.io/kubevirt/pkg/monitoring/profiler"
 	_ "kubevirt.io/kubevirt/pkg/monitoring/reflector/prometheus" // import for prometheus metrics
 	_ "kubevirt.io/kubevirt/pkg/monitoring/workqueue/prometheus" // import for prometheus metrics
@@ -541,7 +542,7 @@ func (app *virtHandlerApp) runPrometheusServer(errCh chan error) {
 
 	mux.Add(webService)
 	log.Log.V(1).Infof("metrics: max concurrent requests=%d", app.MaxRequestsInFlight)
-	mux.Handle("/metrics", promdomain.Handler(app.MaxRequestsInFlight))
+	mux.Handle("/metrics", metricshandler.Handler(app.MaxRequestsInFlight))
 	server := http.Server{
 		Addr:      app.ServiceListen.Address(),
 		Handler:   mux,

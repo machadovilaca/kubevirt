@@ -34,11 +34,6 @@ const StatsMaxAge = CollectionTimeout + 2*time.Second // "a bit more" than timeo
 
 type vmiSocketMap map[string]*k6tv1.VirtualMachineInstance
 
-type Collector interface {
-	Scrape(key string, vmi *k6tv1.VirtualMachineInstance)
-	Collect(vmis []*k6tv1.VirtualMachineInstance, scraper MetricsScraper, timeout time.Duration) (skipped []string, completed bool)
-}
-
 type ConcurrentCollector struct {
 	lock             sync.Mutex
 	clientsPerKey    map[string]int
