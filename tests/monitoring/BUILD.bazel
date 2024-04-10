@@ -4,6 +4,7 @@ go_library(
     name = "go_default_library",
     srcs = [
         "component_monitoring.go",
+        "gpu.go",
         "metrics.go",
         "monitoring.go",
         "vm_monitoring.go",
