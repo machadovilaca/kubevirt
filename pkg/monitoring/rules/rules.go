@@ -49,7 +49,7 @@ func SetupRules(namespace string) error {
 }
 
 func BuildPrometheusRule(namespace string) (*promv1.PrometheusRule, error) {
-	rules, err := operatorrules.BuildPrometheusRule(
+	return operatorrules.BuildPrometheusRule(
 		kubevirtPrometheusRuleName,
 		namespace,
 		map[string]string{
@@ -57,11 +57,6 @@ func BuildPrometheusRule(namespace string) (*promv1.PrometheusRule, error) {
 			k8sAppLabelKey:     kubevirtLabelValue,
 		},
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	return rules, nil
 }
 
 func ListRecordingRules() []operatorrules.RecordingRule {
