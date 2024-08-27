@@ -42,7 +42,12 @@ func SetupMetrics(virtShareDir, nodeName string, MaxRequestsInFlight int, vmiInf
 	SetVersionInfo()
 
 	domainstats.SetupDomainStatsCollector(virtShareDir, nodeName, MaxRequestsInFlight, vmiInformer)
-	return operatormetrics.RegisterCollector(domainstats.Collector)
+
+	if err := setupMigrationStatsCollector(vmiInformer); err != nil {
+		return err
+	}
+
+	return operatormetrics.RegisterCollector(domainstats.Collector, migrationStatsCollector)
 }
 
 func ListMetrics() []operatormetrics.Metric {
