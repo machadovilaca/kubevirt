@@ -74,6 +74,10 @@ func newQueue(vmiStore cache.Store, vmi *v1.VirtualMachineInstance) *queue {
 func (q *queue) startPolling() {
 	q.ctx, q.ctxCancel = context.WithCancel(context.Background())
 
+	// Run collection immediately
+	log.Log.Infof("collecting domain stats for VMI %s/%s", q.vmi.Namespace, q.vmi.Name)
+	q.collect()
+
 	ticker := time.NewTicker(pollingInterval)
 	go func() {
 		for range ticker.C {
@@ -160,5 +164,17 @@ func (q *queue) isMigrationFinished() bool {
 	}
 
 	vmi := vmiRaw.(*v1.VirtualMachineInstance)
-	return vmi.Status.MigrationState == nil || vmi.Status.MigrationState.Completed
+	return migrationStateIsFinished(vmi.Status.MigrationState)
+}
+
+func migrationStateIsFinished(migrationState *v1.VirtualMachineInstanceMigrationState) bool {
+	if migrationState == nil {
+		return true
+	}
+
+	if migrationState.StartTimestamp != nil && migrationState.Completed {
+		return true
+	}
+
+	return false
 }

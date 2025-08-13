@@ -68,7 +68,7 @@ func (h *handler) Collect() []result {
 func (h *handler) handleVmiUpdate(_oldObj, newObj interface{}) {
 	newVmi := newObj.(*v1.VirtualMachineInstance)
 
-	if newVmi.Status.MigrationState == nil || newVmi.Status.MigrationState.Completed {
+	if migrationStateIsFinished(newVmi.Status.MigrationState) {
 		return
 	}
 
@@ -79,13 +79,16 @@ func (h *handler) addMigration(vmi *v1.VirtualMachineInstance) {
 	key := controller.NamespacedKey(vmi.Namespace, vmi.Name)
 
 	h.Lock()
-	defer h.Unlock()
 
 	if _, ok := h.vmiStats[key]; ok {
+		h.Unlock()
 		return
 	}
 
 	q := newQueue(h.vmiStore, vmi)
-	q.startPolling()
 	h.vmiStats[key] = q
+
+	h.Unlock()
+
+	q.startPolling()
 }
