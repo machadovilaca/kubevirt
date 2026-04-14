@@ -191,6 +191,21 @@ func (mr *MockLauncherClientMockRecorder) GetFilesystems() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFilesystems", reflect.TypeOf((*MockLauncherClient)(nil).GetFilesystems))
 }
 
+// GetGPUMetrics mocks base method.
+func (m *MockLauncherClient) GetGPUMetrics() (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGPUMetrics")
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetGPUMetrics indicates an expected call of GetGPUMetrics.
+func (mr *MockLauncherClientMockRecorder) GetGPUMetrics() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGPUMetrics", reflect.TypeOf((*MockLauncherClient)(nil).GetGPUMetrics))
+}
+
 // GetGuestInfo mocks base method.
 func (m *MockLauncherClient) GetGuestInfo() (*v1.VirtualMachineInstanceGuestAgentInfo, error) {
 	m.ctrl.T.Helper()

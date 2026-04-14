@@ -96,6 +96,7 @@ type LauncherClient interface {
 	DeleteDomain(vmi *v1.VirtualMachineInstance) error
 	GetDomain() (*api.Domain, bool, error)
 	GetDomainStats() (*stats.DomainStats, bool, error)
+	GetGPUMetrics() (string, error)
 	GetGuestInfo() (*v1.VirtualMachineInstanceGuestAgentInfo, error)
 	GetUsers() (v1.VirtualMachineInstanceGuestOSUserList, error)
 	GetFilesystems() (v1.VirtualMachineInstanceFileSystemList, error)
@@ -533,6 +534,24 @@ func (c *VirtLauncherClient) GetDomainStats() (*stats.DomainStats, bool, error) 
 		exists = true
 	}
 	return stats, exists, nil
+}
+
+func (c *VirtLauncherClient) GetGPUMetrics() (string, error) {
+	request := &cmdv1.EmptyRequest{}
+	ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
+	defer cancel()
+
+	gpuResponse, err := c.v1client.GetGPUMetrics(ctx, request)
+	var response *cmdv1.Response
+	if gpuResponse != nil {
+		response = gpuResponse.Response
+	}
+
+	if err = handleError(err, "GetGPUMetrics", response); err != nil || gpuResponse == nil {
+		return "", err
+	}
+
+	return gpuResponse.GetGpuMetrics(), nil
 }
 
 func (c *VirtLauncherClient) Ping() error {

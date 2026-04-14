@@ -581,6 +581,24 @@ func (l *Launcher) GetFilesystems(_ context.Context, _ *cmdv1.EmptyRequest) (*cm
 	return response, nil
 }
 
+func (l *Launcher) GetGPUMetrics(_ context.Context, _ *cmdv1.EmptyRequest) (*cmdv1.GPUMetricsResponse, error) {
+	response := &cmdv1.GPUMetricsResponse{
+		Response: &cmdv1.Response{
+			Success: true,
+		},
+	}
+
+	gpuMetrics, err := l.domainManager.GetGPUMetrics()
+	if err != nil {
+		response.Response.Success = false
+		response.Response.Message = getErrorMessage(err)
+		return response, nil
+	}
+
+	response.GpuMetrics = gpuMetrics
+	return response, nil
+}
+
 // Exec the provided command and return it's success
 func (l *Launcher) Exec(ctx context.Context, request *cmdv1.ExecRequest) (*cmdv1.ExecResponse, error) {
 	resp := &cmdv1.ExecResponse{
