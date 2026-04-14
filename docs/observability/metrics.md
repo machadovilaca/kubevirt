@@ -35,6 +35,18 @@
 | kubevirt_vmi_dirty_rate_bytes_per_second | Metric | Gauge | Guest dirty-rate in bytes per second. |
 | kubevirt_vmi_filesystem_capacity_bytes | Metric | Gauge | Total VM filesystem capacity in bytes. |
 | kubevirt_vmi_filesystem_used_bytes | Metric | Gauge | Used VM filesystem capacity in bytes. |
+| kubevirt_vmi_gpu_agent_status | Metric | Gauge | Indicates the guest GPU metrics agent status. |
+| kubevirt_vmi_gpu_decoder_utilization_percent | Metric | Gauge | GPU video decoder utilization percentage (0-100) as reported by the guest GPU metrics agent via NVML. |
+| kubevirt_vmi_gpu_ecc_errors_double_bit_total | Metric | Gauge | GPU lifetime uncorrected (double-bit) ECC error count as reported by the guest GPU metrics agent via NVML. |
+| kubevirt_vmi_gpu_ecc_errors_single_bit_total | Metric | Gauge | GPU lifetime corrected (single-bit) ECC error count as reported by the guest GPU metrics agent via NVML. |
+| kubevirt_vmi_gpu_encoder_utilization_percent | Metric | Gauge | GPU video encoder utilization percentage (0-100) as reported by the guest GPU metrics agent via NVML. |
+| kubevirt_vmi_gpu_memory_total_bytes | Metric | Gauge | GPU total memory in bytes as reported by the guest GPU metrics agent via NVML. |
+| kubevirt_vmi_gpu_memory_used_bytes | Metric | Gauge | GPU memory used in bytes as reported by the guest GPU metrics agent via NVML. |
+| kubevirt_vmi_gpu_memory_utilization_percent | Metric | Gauge | GPU memory controller utilization percentage (0-100) as reported by the guest GPU metrics agent via NVML. |
+| kubevirt_vmi_gpu_power_usage_milliwatts | Metric | Gauge | GPU power usage in milliwatts as reported by the guest GPU metrics agent via NVML. |
+| kubevirt_vmi_gpu_running_processes | Metric | Gauge | Number of compute processes running on the GPU as reported by the guest GPU metrics agent via NVML. |
+| kubevirt_vmi_gpu_temperature_celsius | Metric | Gauge | GPU temperature in degrees Celsius as reported by the guest GPU metrics agent via NVML. |
+| kubevirt_vmi_gpu_utilization_percent | Metric | Gauge | GPU compute utilization percentage (0-100) as reported by the guest GPU metrics agent via NVML. |
 | kubevirt_vmi_guest_load_15m | Metric | Gauge | Guest system load average over 15 minutes as reported by the guest agent. Load is defined as the number of processes in the runqueue or waiting for disk I/O. Requires qemu-guest-agent version 10.0.0 or above. |
 | kubevirt_vmi_guest_load_1m | Metric | Gauge | Guest system load average over 1 minute as reported by the guest agent. Load is defined as the number of processes in the runqueue or waiting for disk I/O. Requires qemu-guest-agent version 10.0.0 or above. |
 | kubevirt_vmi_guest_load_5m | Metric | Gauge | Guest system load average over 5 minutes as reported by the guest agent. Load is defined as the number of processes in the runqueue or waiting for disk I/O. Requires qemu-guest-agent version 10.0.0 or above. |
