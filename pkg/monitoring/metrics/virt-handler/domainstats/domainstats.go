@@ -45,6 +45,7 @@ type VirtualMachineInstanceReport struct {
 type VirtualMachineInstanceStats struct {
 	DomainStats *stats.DomainStats
 	FsStats     k6tv1.VirtualMachineInstanceFileSystemList
+	GPUStats    *GPUMetricsResponse
 }
 
 func newVirtualMachineInstanceReport(

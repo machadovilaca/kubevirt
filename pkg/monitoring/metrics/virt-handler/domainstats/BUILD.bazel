@@ -11,6 +11,7 @@ go_library(
         "dirty_rate_scrapper.go",
         "domainstats.go",
         "filesystem_metrics.go",
+        "gpu_metrics.go",
         "memory_metrics.go",
         "network_metrics.go",
         "node_cpu_affinity_metrics.go",

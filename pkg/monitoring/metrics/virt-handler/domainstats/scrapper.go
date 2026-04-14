@@ -20,6 +20,7 @@
 package domainstats
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -103,6 +104,18 @@ func (d DomainstatsScraper) gatherMetrics(socketFile string) (bool, *VirtualMach
 	vmStats.FsStats, err = cli.GetFilesystems()
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to update filesystem stats from socket %s: %w", socketFile, err)
+	}
+
+	gpuJSON, err := cli.GetGPUMetrics()
+	if err != nil {
+		log.Log.V(logVerbosityWarning).Infof("GPU metrics not available from %s: %v", socketFile, err)
+	} else if gpuJSON != "" {
+		var gpuStats GPUMetricsResponse
+		if err := json.Unmarshal([]byte(gpuJSON), &gpuStats); err != nil {
+			log.Log.V(logVerbosityWarning).Infof("Failed to parse GPU metrics from %s: %v", socketFile, err)
+		} else {
+			vmStats.GPUStats = &gpuStats
+		}
 	}
 
 	return exists, vmStats, nil
