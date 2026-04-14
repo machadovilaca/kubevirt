@@ -231,6 +231,11 @@ func initializeDirs(ephemeralDiskDir string,
 	if err != nil {
 		panic(err)
 	}
+
+	err = virtlauncher.InitializeDisksDirectories(putil.VirtPrivateDir + "/gpu-metrics-channel")
+	if err != nil {
+		panic(err)
+	}
 }
 
 func detectDomainWithUUID(domainManager virtwrap.DomainManager) *api.Domain {

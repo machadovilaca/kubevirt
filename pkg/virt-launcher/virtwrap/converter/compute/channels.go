@@ -23,6 +23,7 @@ import (
 	v1 "kubevirt.io/api/core/v1"
 
 	"kubevirt.io/kubevirt/pkg/downwardmetrics"
+	"kubevirt.io/kubevirt/pkg/util"
 	"kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/api"
 )
 
@@ -35,6 +36,9 @@ func (c ChannelsDomainConfigurator) Configure(vmi *v1.VirtualMachineInstance, do
 		domain.Spec.Devices.Channels = append(domain.Spec.Devices.Channels, newDownwardMetricsChannel())
 	}
 
+	// TODO: gate behind len(vmi.Spec.Domain.Devices.GPUs) > 0 once testing with real GPUs is possible
+	domain.Spec.Devices.Channels = append(domain.Spec.Devices.Channels, newGPUMetricsChannel())
+
 	return nil
 }
 
@@ -45,6 +49,20 @@ func newGuestAgentChannel() api.Channel {
 		Target: &api.ChannelTarget{
 			Name: "org.qemu.guest_agent.0",
 			Type: v1.VirtIO,
+		},
+	}
+}
+
+func newGPUMetricsChannel() api.Channel {
+	return api.Channel{
+		Type: "unix",
+		Source: &api.ChannelSource{
+			Mode: "bind",
+			Path: util.VirtPrivateDir + "/gpu-metrics-channel/gpu-metrics.sock",
+		},
+		Target: &api.ChannelTarget{
+			Type: v1.VirtIO,
+			Name: "org.kubevirt.gpu-metrics.0",
 		},
 	}
 }
