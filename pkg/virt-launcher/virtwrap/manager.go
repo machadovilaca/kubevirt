@@ -26,12 +26,14 @@ package virtwrap
 */
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -166,6 +168,7 @@ type DomainManager interface {
 	InjectLaunchSecret(*v1.VirtualMachineInstance, *v1.SEVSecretOptions) error
 	UpdateGuestMemory(vmi *v1.VirtualMachineInstance) error
 	GetDomainDirtyRateStats(calculationDuration time.Duration) (*stats.DomainStatsDirtyRate, error)
+	GetGPUMetrics() (string, error)
 	GetScreenshot(vmi *v1.VirtualMachineInstance) (*cmdv1.ScreenshotResponse, error)
 }
 
@@ -198,6 +201,7 @@ type LibvirtDomainManager struct {
 	metadataCache             *metadata.Cache
 	domainStatsCache          *virtcache.TimeDefinedCache[*stats.DomainStats]
 	domainDirtyRateStatsCache *virtcache.TimeDefinedCache[*stats.DomainStatsDirtyRate]
+	gpuMetricsCache           *virtcache.TimeDefinedCache[string]
 
 	cpuSetGetter                       func() ([]int, error)
 	imageVolumeFeatureGateEnabled      bool
@@ -312,6 +316,11 @@ func newLibvirtDomainManager(connection cli.Connection, virtShareDir, ephemeralD
 		if err != nil {
 			return nil, fmt.Errorf("failed to keep domain stats updated: %w", err)
 		}
+	}
+
+	manager.gpuMetricsCache, err = virtcache.NewTimeDefinedCache(3250*time.Millisecond, true, scrapeGPUMetrics)
+	if err != nil {
+		return nil, err
 	}
 
 	return &manager, nil
@@ -1989,6 +1998,35 @@ func (l *LibvirtDomainManager) GetQemuVersion() (string, error) {
 
 func (l *LibvirtDomainManager) GetDomainStats() (*stats.DomainStats, error) {
 	return l.domainStatsCache.Get()
+}
+
+func (l *LibvirtDomainManager) GetGPUMetrics() (string, error) {
+	return l.gpuMetricsCache.Get()
+}
+
+func scrapeGPUMetrics() (string, error) {
+	const timeout = 5 * time.Second
+
+	conn, err := net.DialTimeout("unix", kutil.VirtPrivateDir+"/gpu-metrics-channel/gpu-metrics.sock", timeout)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to GPU metrics socket: %w", err)
+	}
+	defer conn.Close()
+
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return "", fmt.Errorf("failed to set deadline on GPU metrics socket: %w", err)
+	}
+
+	if _, err := conn.Write([]byte("GET\n")); err != nil {
+		return "", fmt.Errorf("failed to send request to GPU metrics agent: %w", err)
+	}
+
+	line, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		return "", fmt.Errorf("failed to read GPU metrics response: %w", err)
+	}
+
+	return line, nil
 }
 
 func (l *LibvirtDomainManager) GetDomainDirtyRateStats(calculationDuration time.Duration) (*stats.DomainStatsDirtyRate, error) {
