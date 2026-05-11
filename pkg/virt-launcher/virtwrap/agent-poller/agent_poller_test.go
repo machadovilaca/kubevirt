@@ -222,6 +222,7 @@ var _ = Describe("Qemu agent poller", func() {
 				DomainInfo: api.DomainGuestInfo{},
 			})))
 		})
+
 	})
 
 	Context("PollerWorker", func() {

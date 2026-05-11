@@ -169,6 +169,8 @@ type DomainManager interface {
 	UpdateGuestMemory(vmi *v1.VirtualMachineInstance) error
 	GetDomainDirtyRateStats(calculationDuration time.Duration) (*stats.DomainStatsDirtyRate, error)
 	GetScreenshot(vmi *v1.VirtualMachineInstance) (*cmdv1.ScreenshotResponse, error)
+	GetGuestAgentVersion() string
+	GetAgentData(dataKey string) (string, bool)
 }
 
 type LibvirtDomainManager struct {
@@ -200,6 +202,7 @@ type LibvirtDomainManager struct {
 	metadataCache             *metadata.Cache
 	domainStatsCache          *virtcache.TimeDefinedCache[*stats.DomainStats]
 	domainDirtyRateStatsCache *virtcache.TimeDefinedCache[*stats.DomainStatsDirtyRate]
+	agentDataCaches           map[agentpoller.AgentCommand]*virtcache.TimeDefinedCache[string]
 
 	// Device aliasas are updated only through hotplug events and SyncVMI
 	devAliasMap  map[string]string
@@ -242,14 +245,14 @@ func (s pausedVMIs) contains(uid types.UID) bool {
 
 func NewLibvirtDomainManager(connection cli.Connection, virtShareDir, ephemeralDiskDir string, agentStore *agentpoller.AsyncAgentStore,
 	ovmfPath string, ephemeralDiskCreator ephemeraldisk.EphemeralDiskCreatorInterface, metadataCache *metadata.Cache,
-	stopChan chan struct{}, diskMemoryLimitBytes int64, cpuSetGetter func() ([]int, error), imageVolumeEnabled bool, libvirtHooksServerAndClientEnabled bool, hookServer *premigrationhookserver.PreMigrationHookServer, hypervisorName string, registerNBD storage.RegisterNBDFunc) (DomainManager, error) {
+	stopChan chan struct{}, diskMemoryLimitBytes int64, cpuSetGetter func() ([]int, error), imageVolumeEnabled bool, libvirtHooksServerAndClientEnabled bool, hookServer *premigrationhookserver.PreMigrationHookServer, hypervisorName string, registerNBD storage.RegisterNBDFunc, domainName string, vmStatsCollectorEnabled bool) (DomainManager, error) {
 	directIOChecker := converter.NewDirectIOChecker()
-	return newLibvirtDomainManager(connection, virtShareDir, ephemeralDiskDir, agentStore, ovmfPath, ephemeralDiskCreator, directIOChecker, metadataCache, stopChan, diskMemoryLimitBytes, cpuSetGetter, imageVolumeEnabled, libvirtHooksServerAndClientEnabled, hookServer, hypervisorName, registerNBD)
+	return newLibvirtDomainManager(connection, virtShareDir, ephemeralDiskDir, agentStore, ovmfPath, ephemeralDiskCreator, directIOChecker, metadataCache, stopChan, diskMemoryLimitBytes, cpuSetGetter, imageVolumeEnabled, libvirtHooksServerAndClientEnabled, hookServer, hypervisorName, registerNBD, domainName, vmStatsCollectorEnabled)
 }
 
 func newLibvirtDomainManager(connection cli.Connection, virtShareDir, ephemeralDiskDir string, agentStore *agentpoller.AsyncAgentStore, ovmfPath string,
 	ephemeralDiskCreator ephemeraldisk.EphemeralDiskCreatorInterface, directIOChecker converter.DirectIOChecker, metadataCache *metadata.Cache,
-	stopChan chan struct{}, diskMemoryLimitBytes int64, cpuSetGetter func() ([]int, error), imageVolumeEnabled bool, libvirtHooksServerAndClientEnabled bool, hookServer *premigrationhookserver.PreMigrationHookServer, hypervisorName string, registerNBD storage.RegisterNBDFunc) (DomainManager, error) {
+	stopChan chan struct{}, diskMemoryLimitBytes int64, cpuSetGetter func() ([]int, error), imageVolumeEnabled bool, libvirtHooksServerAndClientEnabled bool, hookServer *premigrationhookserver.PreMigrationHookServer, hypervisorName string, registerNBD storage.RegisterNBDFunc, domainName string, vmStatsCollectorEnabled bool) (DomainManager, error) {
 
 	// Check hypervisor device availability
 	hypervisorDevicePath := "/dev/" + hypervisor.NewLauncherHypervisorResources(hypervisorName).GetHypervisorDevice()
@@ -317,6 +320,37 @@ func newLibvirtDomainManager(connection cli.Connection, virtShareDir, ephemeralD
 		err := manager.domainStatsCache.KeepValueUpdated(stopChan)
 		if err != nil {
 			return nil, fmt.Errorf("failed to keep domain stats updated: %w", err)
+		}
+	}
+
+	if vmStatsCollectorEnabled {
+		agentDataCommandTTLs := map[agentpoller.AgentCommand]time.Duration{
+			"guest-get-load":               20 * time.Second,
+			"guest-get-cpustats":           20 * time.Second,
+			"guest-get-diskstats":          20 * time.Second,
+			"guest-get-time":               60 * time.Second,
+			"guest-get-vcpus":              60 * time.Second,
+			"guest-get-memory-block-info":  60 * time.Second,
+			"guest-network-get-route":      60 * time.Second,
+			"guest-network-get-interfaces": 60 * time.Second,
+			"guest-get-users":              60 * time.Second,
+			"guest-get-osinfo":             5 * time.Minute,
+			"guest-get-disks":              5 * time.Minute,
+			"guest-get-host-name":          5 * time.Minute,
+			"guest-get-timezone":           5 * time.Minute,
+			"guest-get-memory-blocks":      5 * time.Minute,
+		}
+
+		manager.agentDataCaches = make(map[agentpoller.AgentCommand]*virtcache.TimeDefinedCache[string], len(agentDataCommandTTLs))
+		for cmd, ttl := range agentDataCommandTTLs {
+			reCalcFunc := func() (string, error) {
+				return connection.QemuAgentCommand(`{"execute":"`+string(cmd)+`"}`, domainName)
+			}
+			cache, err := virtcache.NewTimeDefinedCache(ttl, true, reCalcFunc)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create agent data cache for %s: %w", cmd, err)
+			}
+			manager.agentDataCaches[cmd] = cache
 		}
 	}
 
@@ -2437,6 +2471,27 @@ func (l *LibvirtDomainManager) GetFilesystems() []v1.VirtualMachineInstanceFileS
 	}
 
 	return fsList
+}
+
+func (l *LibvirtDomainManager) GetGuestAgentVersion() string {
+	return l.agentData.GetGA().Version
+}
+
+func (l *LibvirtDomainManager) GetAgentData(dataKey string) (string, bool) {
+	if l.agentDataCaches == nil {
+		return "", false
+	}
+	cache, exists := l.agentDataCaches[agentpoller.AgentCommand(dataKey)]
+	if !exists {
+		return "", false
+	}
+	data, err := cache.Get()
+	if err != nil {
+		if data == "" {
+			return "", false
+		}
+	}
+	return data, true
 }
 
 func (l *LibvirtDomainManager) GetScreenshot(vmi *v1.VirtualMachineInstance) (*cmdv1.ScreenshotResponse, error) {
